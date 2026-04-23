@@ -13,10 +13,10 @@ To be updated with AI
 git clone https://github.com/USER/roboforgeai
 cd roboforgeai
 python -m venv .venv && source .venv/bin/activate  # (Windows: .venv\Scripts\activate)
-pip install -r requirements.txt
+pip install -e .
 
 # Generate the demo assembly from a spec
-python -m roboforge build examples/bracket_demo.yaml --out build/
+mmcad examples/bracket_demo.yaml --outdir build
 
 # Open outputs
 TBA
@@ -68,6 +68,43 @@ outputs:
 
 # Installation
 tba
+
+## Python Version (Important)
+Use **Python 3.11** for now.
+
+- The current CAD dependency stack is reliable on Python 3.11.
+- Python 3.13 may fail to install/run some pinned CAD packages in this project.
+
+Windows example:
+```bash
+py -3.11 -m venv .venv
+.\.venv\Scripts\activate
+python -m pip install -e .
+```
+
+## How to Use MECHA
+1. Create or edit a spec file (see `examples/bracket_demo.yaml`).
+2. Run the CLI:
+
+```bash
+mmcad examples/bracket_demo.yaml --outdir build
+```
+
+3. Check generated files in `build/<project_name>/`:
+   - part `.step`
+   - part `.stl`
+   - `assembly.csv`
+
+### Export to FreeCAD / STEP Assembly
+After generating parts and `assembly.csv`, run the FreeCAD export helper from a FreeCAD Python environment:
+
+```bash
+python -c "from mmcad.export.freecad_export import export_assembly; export_assembly('build/bracket_demo/assembly.csv', 'build/bracket_demo', 'build/bracket_demo')"
+```
+
+This creates:
+- `assembly.FCStd` (FreeCAD native)
+- `assembly.step` (neutral STEP)
 
 #Multi-CAD Export
 
