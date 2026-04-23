@@ -6,8 +6,8 @@ parts:
     height: 60
     thickness: 6
     holes:
-      - {x: 20, y: 20, d: 5}
-      - {x: 80, y: 20, d: 5}
+      - {x: -30, y: -10, diameter: 5}
+      - {x: 30, y: -10, diameter: 5}
   - type: shaft
     name: pin
     diameter: 8
