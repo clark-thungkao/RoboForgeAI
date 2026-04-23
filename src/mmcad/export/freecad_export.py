@@ -1,12 +1,20 @@
-import FreeCAD as App
+import csv
+import importlib
+import os
+
 try:
-    import Import
-except ImportError:
-    import importlib
+    App = importlib.import_module("FreeCAD")
     Import = importlib.import_module("Import")
-import os, csv
+except ModuleNotFoundError:
+    App = None
+    Import = None
 
 def export_assembly(assembly_csv, parts_dir, outdir):
+    if App is None or Import is None:
+        raise RuntimeError(
+            "FreeCAD modules are not available. Run this from a FreeCAD Python environment."
+        )
+
     doc = App.newDocument("Assembly")
     with open(assembly_csv, newline="") as csvfile:
         reader = csv.DictReader(csvfile)
