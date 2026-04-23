@@ -1,7 +1,7 @@
 ## RoboForgeAI
 > **From spec to robot CAD in minutes.** Define mechanisms in YAML/JSON and generate parametric parts & assemblies with exports for FreeCAD (`.FCStd`) and neutral STEP (Fusion 360, SolidWorks, Inventor).
 To be updated with AI
-> 
+> # 23.04.2026 - Rethinking the approach for more modular design -
 [![CI]
 [![License]
 ![Python]
@@ -114,6 +114,7 @@ Tba
 
 #First Roadmap (will be updated)
 
+# 23.04.2026 - Rethinking the approach for more modular design -
 
 Constraint graph visualizer (roboforge viz)
 Direct Fusion 360 API export (parametric timeline)
