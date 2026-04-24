@@ -16,6 +16,7 @@ from mmcad.ipc_api import (
     api_start_generation,
     api_start_generation_from_project_data,
     api_start_generation_from_project,
+    api_validate_project_data,
 )
 from mmcad.project_io import create_project_data, save_project
 
@@ -225,5 +226,18 @@ def test_api_load_project_bad_path_returns_input_error() -> None:
 def test_api_save_project_invalid_payload_returns_input_error(tmp_path: Path) -> None:
     project_path = tmp_path / "bad.rfa.json"
     result = api_save_project(str(project_path), {"schema_version": 1})
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_validate_project_data_success() -> None:
+    project = create_project_data(name="demo", spec_path="examples/bracket_demo.yaml")
+    result = api_validate_project_data(project)
+    assert result["ok"] is True
+    assert result["data"]["project"]["project"]["name"] == "demo"
+
+
+def test_api_validate_project_data_invalid_payload_returns_input_error() -> None:
+    result = api_validate_project_data({"schema_version": 1})
     assert result["ok"] is False
     assert result["error"]["category"] == "input_validation_error"
