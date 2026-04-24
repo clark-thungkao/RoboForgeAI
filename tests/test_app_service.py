@@ -214,3 +214,42 @@ def test_get_run_metadata_requires_success(tmp_path: Path) -> None:
     job_id = service.start_generation("spec.yaml", str(tmp_path))
     with pytest.raises(RuntimeError, match="succeeded jobs"):
         service.get_run_metadata(job_id)
+
+
+def test_get_latest_job_summary_requires_existing_jobs() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    with pytest.raises(RuntimeError, match="No jobs available"):
+        service.get_latest_job_summary()
+
+
+def test_get_latest_job_summary_includes_run_metadata_for_success(tmp_path: Path) -> None:
+    def fake_build(_: str, outdir: str) -> str:
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    job_id = service.start_generation("spec.yaml", str(tmp_path))
+    _wait_for_terminal_state(service, job_id)
+    summary = service.get_latest_job_summary()
+    assert summary["latest_job"]["job_id"] == job_id
+    assert summary["run_metadata"] is not None
+    assert summary["run_metadata"]["status"] == "succeeded"
+
+
+def test_get_latest_job_summary_omits_metadata_for_failed_job(tmp_path: Path) -> None:
+    def fake_build(_: str, __: str) -> str:
+        raise ValueError("boom")
+
+    service = BuildService(build_fn=fake_build)
+    job_id = service.start_generation("spec.yaml", str(tmp_path))
+    _wait_for_terminal_state(service, job_id)
+    summary = service.get_latest_job_summary()
+    assert summary["latest_job"]["job_id"] == job_id
+    assert summary["latest_job"]["status"] == "failed"
+    assert summary["run_metadata"] is None

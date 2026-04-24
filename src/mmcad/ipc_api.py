@@ -174,3 +174,13 @@ def api_get_run_metadata(service: BuildService, job_id: str) -> dict[str, Any]:
     except Exception as err:  # pragma: no cover - defensive boundary
         return _error_payload("unknown_error", str(err))
     return {"ok": True, "data": metadata}
+
+
+def api_get_latest_job_summary(service: BuildService) -> dict[str, Any]:
+    try:
+        summary = service.get_latest_job_summary()
+    except RuntimeError as err:
+        return _error_payload("generation_failure", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": summary}
