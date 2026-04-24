@@ -113,6 +113,7 @@ See `CONTRIBUTING.md` and `docs/dev_setup.md`.
 - `docs/requirements_v2.md`
 - `docs/roadmap_24m.md`
 - `docs/m1_implementation_plan.md`
+- `docs/m1_execution_tracker.md`
 - `docs/adr_001_m1_architecture.md`
 - `docs/adr_002_component_library.md`
 - `docs/adr_003_rule_engine_policy.md`
