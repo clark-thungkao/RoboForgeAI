@@ -200,3 +200,150 @@ def api_get_dashboard_snapshot(service: BuildService) -> dict[str, Any]:
     except Exception as err:  # pragma: no cover - defensive boundary
         return _error_payload("unknown_error", str(err))
     return {"ok": True, "data": snapshot}
+
+
+def api_get_recent_failures(service: BuildService, *, limit: int = 5) -> dict[str, Any]:
+    try:
+        failures = service.get_recent_failures(limit=limit)
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": {"failures": failures}}
+
+
+def api_get_home_snapshot(
+    service: BuildService, *, recent_failure_limit: int = 5
+) -> dict[str, Any]:
+    try:
+        snapshot = service.get_home_snapshot(recent_failure_limit=recent_failure_limit)
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": snapshot}
+
+
+def api_get_job_timeline(service: BuildService, *, limit: int = 20) -> dict[str, Any]:
+    try:
+        timeline = service.get_job_timeline(limit=limit)
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": {"timeline": timeline}}
+
+
+def api_get_ui_bootstrap(
+    service: BuildService, *, recent_failure_limit: int = 5, timeline_limit: int = 20
+) -> dict[str, Any]:
+    try:
+        data = service.get_ui_bootstrap(
+            recent_failure_limit=recent_failure_limit,
+            timeline_limit=timeline_limit,
+        )
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": data}
+
+
+def api_get_job_details(service: BuildService, job_id: str) -> dict[str, Any]:
+    try:
+        details = service.get_job_details(job_id)
+    except KeyError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": details}
+
+
+def api_retry_job(service: BuildService, job_id: str) -> dict[str, Any]:
+    try:
+        new_job_id = service.retry_job(job_id)
+    except KeyError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": {"job_id": new_job_id}}
+
+
+def api_prune_jobs(service: BuildService, *, keep_recent: int = 100) -> dict[str, Any]:
+    try:
+        result = service.prune_jobs(keep_recent=keep_recent)
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": result}
+
+
+def api_delete_job(service: BuildService, job_id: str) -> dict[str, Any]:
+    try:
+        result = service.delete_job(job_id)
+    except KeyError as err:
+        return _error_payload("input_validation_error", str(err))
+    except RuntimeError as err:
+        return _error_payload("generation_failure", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": result}
+
+
+def api_get_active_jobs(service: BuildService, *, limit: int | None = None) -> dict[str, Any]:
+    try:
+        jobs = service.get_active_jobs(limit=limit)
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": {"jobs": jobs}}
+
+
+def api_clear_finished_jobs(service: BuildService) -> dict[str, Any]:
+    try:
+        result = service.clear_finished_jobs()
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": result}
+
+
+def api_delete_jobs(service: BuildService, job_ids: list[str]) -> dict[str, Any]:
+    try:
+        result = service.delete_jobs(job_ids)
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": result}
+
+
+def api_get_backend_capabilities(service: BuildService) -> dict[str, Any]:
+    try:
+        data = service.get_backend_capabilities()
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": data}
+
+
+def api_get_backend_health(service: BuildService) -> dict[str, Any]:
+    try:
+        data = service.get_backend_health()
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": data}
+
+
+def api_get_contract_summary(service: BuildService) -> dict[str, Any]:
+    try:
+        data = service.get_contract_summary()
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": data}
+
+
+def api_cancel_all_active_jobs(service: BuildService) -> dict[str, Any]:
+    try:
+        data = service.cancel_all_active_jobs()
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": data}

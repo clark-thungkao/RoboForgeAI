@@ -13,6 +13,21 @@ from mmcad.ipc_api import (
     api_get_latest_job_summary,
     api_get_job_stats,
     api_get_dashboard_snapshot,
+    api_get_recent_failures,
+    api_get_home_snapshot,
+    api_get_job_timeline,
+    api_get_ui_bootstrap,
+    api_get_job_details,
+    api_retry_job,
+    api_prune_jobs,
+    api_delete_job,
+    api_get_active_jobs,
+    api_clear_finished_jobs,
+    api_delete_jobs,
+    api_get_backend_capabilities,
+    api_get_backend_health,
+    api_get_contract_summary,
+    api_cancel_all_active_jobs,
     api_list_jobs,
     api_load_project,
     api_save_project,
@@ -347,3 +362,322 @@ def test_api_get_dashboard_snapshot_with_succeeded_latest_job(tmp_path: Path) ->
     assert result["ok"] is True
     assert result["data"]["stats"]["total"] == 1
     assert result["data"]["latest_summary"]["latest_job"]["job_id"] == job_id
+
+
+def test_api_get_recent_failures_returns_failed_jobs(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=fake_build)
+    failed_id = api_start_generation(service, "fail.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, failed_id)
+    result = api_get_recent_failures(service, limit=1)
+    assert result["ok"] is True
+    assert len(result["data"]["failures"]) == 1
+    assert result["data"]["failures"][0]["job_id"] == failed_id
+
+
+def test_api_get_recent_failures_invalid_limit_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_recent_failures(service, limit=0)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_get_home_snapshot_success(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    failed_id = api_start_generation(service, "fail.yaml", str(tmp_path))["data"]["job_id"]
+    succeeded_id = api_start_generation(service, "ok.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, failed_id)
+    _await_terminal(service, succeeded_id)
+    result = api_get_home_snapshot(service, recent_failure_limit=1)
+    assert result["ok"] is True
+    assert result["data"]["dashboard"]["latest_summary"]["latest_job"]["job_id"] == succeeded_id
+    assert result["data"]["recent_failures"][0]["job_id"] == failed_id
+
+
+def test_api_get_home_snapshot_invalid_limit_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_home_snapshot(service, recent_failure_limit=0)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_get_job_timeline_success(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    failed_id = api_start_generation(service, "fail.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, failed_id)
+    result = api_get_job_timeline(service, limit=5)
+    assert result["ok"] is True
+    assert len(result["data"]["timeline"]) > 0
+    assert any(item["job_id"] == failed_id for item in result["data"]["timeline"])
+
+
+def test_api_get_job_timeline_invalid_limit_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_job_timeline(service, limit=0)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_get_ui_bootstrap_success(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    failed_id = api_start_generation(service, "fail.yaml", str(tmp_path))["data"]["job_id"]
+    succeeded_id = api_start_generation(service, "ok.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, failed_id)
+    _await_terminal(service, succeeded_id)
+
+    result = api_get_ui_bootstrap(service, recent_failure_limit=1, timeline_limit=4)
+    assert result["ok"] is True
+    assert result["data"]["home"]["dashboard"]["stats"]["total"] == 2
+    assert result["data"]["home"]["recent_failures"][0]["job_id"] == failed_id
+    assert any(event["job_id"] == succeeded_id for event in result["data"]["timeline"])
+
+
+def test_api_get_ui_bootstrap_invalid_limit_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_ui_bootstrap(service, recent_failure_limit=0, timeline_limit=1)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_get_job_details_success_for_succeeded_job(tmp_path: Path) -> None:
+    def fake_build(_: str, outdir: str) -> str:
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    job_id = api_start_generation(service, "ok.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, job_id)
+    result = api_get_job_details(service, job_id)
+    assert result["ok"] is True
+    assert result["data"]["status"]["job_id"] == job_id
+    assert result["data"]["artifacts"] is not None
+    assert result["data"]["run_metadata"] is not None
+
+
+def test_api_get_job_details_unknown_job_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_job_details(service, "missing")
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_retry_job_success(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "demo"))
+    original_id = api_start_generation(service, "spec.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, original_id)
+
+    retried = api_retry_job(service, original_id)
+    assert retried["ok"] is True
+    assert retried["data"]["job_id"] != original_id
+
+
+def test_api_retry_job_unknown_job_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_retry_job(service, "missing")
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_prune_jobs_success(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "ok"))
+    first = api_start_generation(service, "a.yaml", str(tmp_path))["data"]["job_id"]
+    second = api_start_generation(service, "b.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, first)
+    _await_terminal(service, second)
+
+    result = api_prune_jobs(service, keep_recent=1)
+    assert result["ok"] is True
+    assert result["data"]["removed_count"] == 1
+    jobs = api_list_jobs(service)
+    assert len(jobs["data"]["jobs"]) == 1
+
+
+def test_api_prune_jobs_invalid_keep_recent_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_prune_jobs(service, keep_recent=-1)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_delete_job_success(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "ok"))
+    job_id = api_start_generation(service, "a.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, job_id)
+    result = api_delete_job(service, job_id)
+    assert result["ok"] is True
+    assert result["data"]["deleted_job_id"] == job_id
+
+
+def test_api_delete_job_running_returns_generation_failure(tmp_path: Path) -> None:
+    def slow_build(_: str, outdir: str) -> str:
+        time.sleep(0.2)
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=slow_build)
+    job_id = api_start_generation(service, "a.yaml", str(tmp_path))["data"]["job_id"]
+    time.sleep(0.05)
+    result = api_delete_job(service, job_id)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "generation_failure"
+
+
+def test_api_delete_job_unknown_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_delete_job(service, "missing")
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_get_active_jobs_success(tmp_path: Path) -> None:
+    def slow_build(_: str, outdir: str) -> str:
+        time.sleep(0.2)
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=slow_build)
+    active_id = api_start_generation(service, "slow.yaml", str(tmp_path))["data"]["job_id"]
+    time.sleep(0.05)
+    result = api_get_active_jobs(service, limit=1)
+    assert result["ok"] is True
+    assert len(result["data"]["jobs"]) <= 1
+    assert any(job["job_id"] == active_id for job in result["data"]["jobs"])
+
+
+def test_api_get_active_jobs_invalid_limit_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_active_jobs(service, limit=0)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_clear_finished_jobs_success(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "ok"))
+    one = api_start_generation(service, "a.yaml", str(tmp_path))["data"]["job_id"]
+    two = api_start_generation(service, "b.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, one)
+    _await_terminal(service, two)
+    result = api_clear_finished_jobs(service)
+    assert result["ok"] is True
+    assert result["data"]["removed_count"] == 2
+
+
+def test_api_clear_finished_jobs_keeps_active_jobs(tmp_path: Path) -> None:
+    def slow_build(_: str, outdir: str) -> str:
+        time.sleep(0.2)
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=slow_build)
+    active = api_start_generation(service, "slow.yaml", str(tmp_path))["data"]["job_id"]
+    time.sleep(0.05)
+    result = api_clear_finished_jobs(service)
+    assert result["ok"] is True
+    assert result["data"]["removed_count"] == 0
+    status = api_get_job_status(service, active)
+    assert status["ok"] is True
+
+
+def test_api_delete_jobs_bulk_success_with_partial_errors(tmp_path: Path) -> None:
+    def slow_build(_: str, outdir: str) -> str:
+        time.sleep(0.2)
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=slow_build)
+    finished_id = api_start_generation(service, "done.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, finished_id)
+    running_id = api_start_generation(service, "slow.yaml", str(tmp_path))["data"]["job_id"]
+    time.sleep(0.05)
+
+    result = api_delete_jobs(service, [finished_id, running_id, "missing"])
+    assert result["ok"] is True
+    assert result["data"]["deleted_count"] == 1
+    assert result["data"]["deleted_job_ids"] == [finished_id]
+    assert len(result["data"]["errors"]) == 2
+
+
+def test_api_get_backend_capabilities_success() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_backend_capabilities(service)
+    assert result["ok"] is True
+    assert result["data"]["api_version"] == 1
+    assert "job_status" in result["data"]["features"]
+
+
+def test_api_get_backend_health_success(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "ok"))
+    job_id = api_start_generation(service, "a.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, job_id)
+    result = api_get_backend_health(service)
+    assert result["ok"] is True
+    assert result["data"]["status"] == "ok"
+    assert result["data"]["api_version"] == 1
+
+
+def test_api_get_contract_summary_success() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_contract_summary(service)
+    assert result["ok"] is True
+    assert result["data"]["api_version"] == 1
+    assert "unknown_error" in result["data"]["error_categories"]
+
+
+def test_api_cancel_all_active_jobs_success(tmp_path: Path) -> None:
+    def slow_build(_: str, outdir: str) -> str:
+        time.sleep(0.2)
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=slow_build)
+    api_start_generation(service, "a.yaml", str(tmp_path))
+    api_start_generation(service, "b.yaml", str(tmp_path))
+    time.sleep(0.05)
+    result = api_cancel_all_active_jobs(service)
+    assert result["ok"] is True
+    assert result["data"]["requested_count"] >= 1
+    assert result["data"]["cancelled_count"] >= 1
+
+
+def test_api_cancel_all_active_jobs_when_none_active() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_cancel_all_active_jobs(service)
+    assert result["ok"] is True
+    assert result["data"]["requested_count"] == 0
+    assert result["data"]["cancelled_count"] == 0
