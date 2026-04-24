@@ -17,6 +17,8 @@ eggs/
 lib/
 lib64/
 parts/
+!src/mmcad/parts/
+!src/mmcad/parts/**
 sdist/
 var/
 wheels/
