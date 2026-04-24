@@ -6,19 +6,45 @@ name = "MECHA"
 version = "0.1.0"
 description = "Parametric CAD + deterministic design helpers with optional AI assists for robotics/mechatronics."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11,<3.12"
 authors = [{ name = "Clark", email = "thungkao.kla@gmail.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Scientific/Engineering",
+]
 dependencies = [
     "cadquery>=2.4.0,<2.6.0",
     "cadquery-ocp>=7.7.0,<7.8",
     "pyyaml>=6.0"
 ]
 
+[project.urls]
+Homepage = "https://github.com/clark-thungkao/RoboForgeAI"
+Repository = "https://github.com/clark-thungkao/RoboForgeAI"
+Issues = "https://github.com/clark-thungkao/RoboForgeAI/issues"
+
 [project.scripts]
 mmcad = "mmcad.cli:main"
 
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.5",
+]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
 
 [tool.mm.ai]
 provider = "cloud"         # "none" | "cloud"

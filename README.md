@@ -1,169 +1,121 @@
-## RoboForgeAI
-> **From spec to robot CAD in minutes.** Define mechanisms in YAML/JSON and generate parametric parts & assemblies with exports for FreeCAD (`.FCStd`) and neutral STEP (Fusion 360, SolidWorks, Inventor).
-To be updated with AI
-> # 23.04.2026 - Rethinking the approach for more modular design -
-[![CI]
-[![License]
-![Python]
-![Status]
+# RoboForgeAI (MECHA)
 
-## TL;DR (Quickstart)
+From spec to CAD in minutes. Define parts and simple assembly placement in YAML, then generate STEP/STL parts plus an assembly transform CSV.
+
+## Compatibility
+
+- Supported runtime: **Python 3.11**
+- CAD stack is pinned for reliability on Python 3.11.
+- Python 3.13 is not yet supported by the current dependency set.
+
+## Quickstart
+
 ```bash
-# Clone & setup
-git clone https://github.com/USER/roboforgeai
-cd roboforgeai
-python -m venv .venv && source .venv/bin/activate  # (Windows: .venv\Scripts\activate)
-pip install -e .
-
-# Generate the demo assembly from a spec
-mmcad examples/bracket_demo.yaml --outdir build
-
-# Open outputs
-TBA
-
-```
-First Idea of RoboForgeAI
-Spec → CAD: go from a structured spec to editable CAD in one command.
-
-Parametric: parts & assemblies are generated with parameters you can tweak.
-
-Repeatable: deterministic builds—great for design reviews & CI.
-
-Multi-CAD friendly: FreeCAD for native parametrics; STEP for everything else.
-
-#Features
-
-YAML/JSON → parts, subassemblies, constraints, BOM.
-
-Exports: FreeCAD (.FCStd) and STEP; BOM as CSV/XLSX.
-
-Pluggable builders (e.g., brackets, plates, linkages, gear trains).
-
-Rule-based/AI helpers for quick mechanism variants (WIP).
-
-Headless mode for CI runners.
-
-# Example (minimal spec)
-```bash
-name: "demo_bracket_assembly"
-units: mm
-parts:
-  - type: bracket
-    name: L_bracket
-    params: { w: 40, h: 40, t: 3, r: 4, hole_d: 5, pitch: 20 }
-  - type: plate
-    name: base_plate
-    params: { w: 60, h: 60, t: 4, hole_d: 5, pattern: "2x2", pitch: 30 }
-assembly:
-  - mate: { type: planar, a: base_plate.top, b: L_bracket.bottom }
-  - mate: { type: concentric, a: base_plate.hole_1, b: L_bracket.hole_1 }
-outputs:
-  - format: fcstd
-    path: build/assembly.FCStd
-  - format: step
-    path: build/assembly.step
-  - format: bom
-    path: build/BOM.xlsx
-```
-
-# Installation
-tba
-
-## Python Version (Important)
-Use **Python 3.11** for now.
-
-- The current CAD dependency stack is reliable on Python 3.11.
-- Python 3.13 may fail to install/run some pinned CAD packages in this project.
-
-Windows example:
-```bash
+# Windows
 py -3.11 -m venv .venv
 .\.venv\Scripts\activate
 python -m pip install -e .
-```
 
-## How to Use MECHA
-1. Create or edit a spec file (see `examples/bracket_demo.yaml`).
-2. Run the CLI:
-
-```bash
+# Build the example project
 mmcad examples/bracket_demo.yaml --outdir build
 ```
 
-3. Check generated files in `build/<project_name>/`:
-   - part `.step`
-   - part `.stl`
-   - `assembly.csv`
+Outputs are written to `build/<project>/`:
+- `<part>.step`
+- `<part>.stl`
+- `assembly.csv`
 
-### Export to FreeCAD / STEP Assembly
-After generating parts and `assembly.csv`, run the FreeCAD export helper from a FreeCAD Python environment:
+## Spec Schema (Current)
+
+Top-level fields:
+- `project` (optional): output folder name; defaults to spec file name
+- `parts` (required): list of part objects
+- `assemblies` (optional): assembly placement list
+
+Supported part types:
+
+1) `plate`
+- Required: `type`, `name`, `width`, `height`, `thickness`
+- Optional: `holes`
+- `holes` items:
+  - `x` (default `0`)
+  - `y` (default `0`)
+  - `diameter` (required; legacy `d` is accepted for compatibility)
+  - Coordinates are relative to plate center.
+
+2) `shaft`
+- Required: `type`, `name`, `diameter`, `length`
+
+3) `link`
+- Required: `type`, `name`, `length`, `width`, `thickness`
+- Optional: `end_hole_d` (default `8`)
+
+Assembly items:
+- `assemblies` is a list of objects with:
+  - `name`
+  - `items` (list)
+- `items` entries:
+  - `part`: must reference a defined part name
+  - `transform`: `[tx, ty, tz, rx, ry, rz]` (exactly 6 numbers)
+
+## Example Spec
+
+```yaml
+project: bracket_demo
+parts:
+  - type: plate
+    name: base
+    width: 100
+    height: 60
+    thickness: 6
+    holes:
+      - {x: -30, y: -10, diameter: 5}
+      - {x: 30, y: -10, diameter: 5}
+  - type: shaft
+    name: pin
+    diameter: 8
+    length: 40
+assemblies:
+  - name: assy
+    items:
+      - {part: base, transform: [0, 0, 0, 0, 0, 0]}
+      - {part: pin, transform: [0, 0, 6, 0, 0, 0]}
+```
+
+## FreeCAD Export
+
+To produce a FreeCAD assembly and STEP assembly export, run from a FreeCAD Python environment:
 
 ```bash
 python -c "from mmcad.export.freecad_export import export_assembly; export_assembly('build/bracket_demo/assembly.csv', 'build/bracket_demo', 'build/bracket_demo')"
 ```
 
 This creates:
-- `assembly.FCStd` (FreeCAD native)
-- `assembly.step` (neutral STEP)
+- `assembly.FCStd`
+- `assembly.step`
 
-#Multi-CAD Export
+## Project Layout
 
-FreeCAD: native .FCStd keeps parametrics and constraints.
-
-STEP: neutral .step for broad compatibility (no parametrics).
-
-#Project Structure
 ```bash
-roboforgeai/
-  roboforge/
-    cli.py              # CLI entry points
-    core/               # schema, validators, units
-    builders/           # parametric parts (bracket, plate, shaft, gears, etc.)
-    assembly/           # mates/constraints → scene graph
-    exporters/          # freecad.py, step.py, bom.py
-examples/
-  bracket_demo.yaml
-media/
-  demo.gif
+src/mmcad/cli.py
+src/mmcad/parts/basic.py
+src/mmcad/export/freecad_export.py
+examples/bracket_demo.yaml
+tests/
 ```
-#Windows/macOS/Linux notes (FreeCAD CLI)
-```bash
-Windows: ensure FreeCADCmd.exe is on PATH, e.g.
 
-set "PATH=C:\Program Files\FreeCAD 0.21\bin;%PATH%"
-FreeCADCmd --version
-```
-#Linux:
+## Contributing
 
-freecadcmd --version
+See `CONTRIBUTING.md` and `docs/dev_setup.md`.
 
+## Product Planning Docs
 
-#If RoboForgeAI can’t find FreeCAD automatically, set an env var before building:
-```bash
-# Point to your FreeCAD command
-# Windows (PowerShell):
-$env:ROBOFORGE_FREECAD_CMD="C:\Program Files\FreeCAD 0.21\bin\FreeCADCmd.exe"
-# macOS/Linux (bash/zsh):
-export ROBOFORGE_FREECAD_CMD="/Applications/FreeCAD.app/Contents/MacOS/FreeCADCmd"
-```
-#Troubleshooting
-Tba
-
-#First Roadmap (will be updated)
-
-# 23.04.2026 - Rethinking the approach for more modular design -
-
-Constraint graph visualizer (roboforge viz)
-Direct Fusion 360 API export (parametric timeline)
-Mechanism templates (linkages, belt drives, gear trains)
-Tolerancing & fastener libraries
-AI-assisted design suggestions from requirements text
-
-#Contributing
-
-PRs welcome! Please:
-See CONTRIBUTING.md and docs/dev_setup.md. *tba
-
-#Citation
-
-If this project helps your research, please cite it. Add a CITATION.cff at repo root for GitHub to generate citation metadata.
+- `docs/requirements_v2.md`
+- `docs/roadmap_24m.md`
+- `docs/m1_implementation_plan.md`
+- `docs/adr_001_m1_architecture.md`
+- `docs/adr_002_component_library.md`
+- `docs/adr_003_rule_engine_policy.md`
+- `docs/adr_004_ai_governance.md`
+- `docs/adr_005_pilot_gtm_validation.md`
+- `docs/release_checklist.md`

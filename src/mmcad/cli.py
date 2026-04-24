@@ -1,52 +1,141 @@
-import argparse, os, yaml
+import argparse
+import os
+import sys
+
 import cadquery as cq
-from mmcad.parts.basic import plate, shaft, link_rect
+import yaml
 
-def _make_part(p):
-    t = p["type"]
-    if t == "plate": return plate(p["width"], p["height"], p["thickness"], p.get("holes"))
-    if t == "shaft": return shaft(p["diameter"], p["length"])
-    if t == "link":  return link_rect(p["length"], p["width"], p["thickness"], p.get("end_hole_d", 8))
-    raise ValueError(f"Unknown part type: {t}")
+from mmcad.parts.basic import link_rect, plate, shaft
 
-def build(spec_path, outdir="build"):
-    # load YAML
-    with open(spec_path, "r", encoding="utf-8") as fh:
-        spec = yaml.safe_load(fh)
 
-    # choose project name (YAML key, or file stem)
-    project_name = spec.get("project") or os.path.splitext(os.path.basename(spec_path))[0]
+class SpecError(ValueError):
+    """Raised when a build spec is invalid."""
 
-    # create build/<project_name>
-    proj_outdir = os.path.join(outdir, project_name)
-    os.makedirs(proj_outdir, exist_ok=True)
 
-    # parts
-    for p in spec.get("parts", []):
-        m = _make_part(p)
-        cq.exporters.export(m, os.path.join(proj_outdir, f"{p['name']}.step"))
-        cq.exporters.export(m, os.path.join(proj_outdir, f"{p['name']}.stl"))
+def _require_fields(data: dict, fields: tuple[str, ...], where: str) -> None:
+    missing = [name for name in fields if name not in data]
+    if missing:
+        raise SpecError(f"Missing required field(s) {missing} in {where}.")
 
-    # assemblies
-    asm_path = os.path.join(proj_outdir, "assembly.csv")
-    with open(asm_path, "w", encoding="utf-8") as f:
-        f.write("assembly,part,tx,ty,tz,rx,ry,rz\n")
+
+def _normalize_holes(holes: list[dict], where: str) -> list[dict]:
+    normalized = []
+    for idx, hole in enumerate(holes):
+        if not isinstance(hole, dict):
+            raise SpecError(f"Hole entry {idx} in {where} must be a mapping.")
+        if "diameter" not in hole and "d" not in hole:
+            raise SpecError(f"Hole entry {idx} in {where} must include 'diameter'.")
+        normalized.append(
+            {
+                "x": float(hole.get("x", 0.0)),
+                "y": float(hole.get("y", 0.0)),
+                "diameter": float(hole.get("diameter", hole.get("d"))),
+            }
+        )
+    return normalized
+
+
+def _make_part(part: dict) -> tuple[str, cq.Workplane]:
+    _require_fields(part, ("type", "name"), "part definition")
+    part_type = part["type"]
+    name = part["name"]
+
+    if part_type == "plate":
+        _require_fields(part, ("width", "height", "thickness"), f"plate part '{name}'")
+        holes = _normalize_holes(part.get("holes", []), f"plate part '{name}'")
+        model = plate(part["width"], part["height"], part["thickness"], holes)
+        return name, model
+    if part_type == "shaft":
+        _require_fields(part, ("diameter", "length"), f"shaft part '{name}'")
+        return name, shaft(part["diameter"], part["length"])
+    if part_type == "link":
+        _require_fields(part, ("length", "width", "thickness"), f"link part '{name}'")
+        return name, link_rect(part["length"], part["width"], part["thickness"], part.get("end_hole_d", 8))
+    raise SpecError(f"Unknown part type '{part_type}' for part '{name}'.")
+
+
+def _load_spec(spec_path: str) -> dict:
+    if not os.path.exists(spec_path):
+        raise SpecError(f"Spec file not found: {spec_path}")
+    try:
+        with open(spec_path, "r", encoding="utf-8") as handle:
+            spec = yaml.safe_load(handle)
+    except yaml.YAMLError as err:
+        raise SpecError(f"Failed to parse YAML in '{spec_path}': {err}") from err
+
+    if not isinstance(spec, dict):
+        raise SpecError("Top-level YAML must be a mapping/object.")
+    if not isinstance(spec.get("parts"), list) or not spec["parts"]:
+        raise SpecError("Spec must include a non-empty 'parts' list.")
+    return spec
+
+
+def _write_assembly_csv(spec: dict, output_path: str, part_names: set[str]) -> None:
+    with open(output_path, "w", encoding="utf-8") as handle:
+        handle.write("assembly,part,tx,ty,tz,rx,ry,rz\n")
         assemblies = spec.get("assemblies", [])
         if not assemblies:
-            for p in spec.get("parts", []):
-                f.write(f"default,{p['name']},0,0,0,0,0,0\n")
-        else:
-            for a in assemblies:
-                for item in a["items"]:
-                    tx, ty, tz, rx, ry, rz = item["transform"]
-                    f.write(f"{a['name']},{item['part']},{tx},{ty},{tz},{rx},{ry},{rz}\n")
+            for part_name in sorted(part_names):
+                handle.write(f"default,{part_name},0,0,0,0,0,0\n")
+            return
 
-    print(f"Done. Files in {proj_outdir}/ (STEP, STL, and assembly.csv)")
+        for assembly in assemblies:
+            _require_fields(assembly, ("name", "items"), "assembly definition")
+            if not isinstance(assembly["items"], list):
+                raise SpecError(f"Assembly '{assembly['name']}' items must be a list.")
+            for item in assembly["items"]:
+                _require_fields(item, ("part", "transform"), f"assembly '{assembly['name']}' item")
+                if item["part"] not in part_names:
+                    raise SpecError(
+                        f"Assembly '{assembly['name']}' references unknown part '{item['part']}'."
+                    )
+                transform = item["transform"]
+                if not isinstance(transform, list) or len(transform) != 6:
+                    raise SpecError(
+                        f"Assembly '{assembly['name']}' part '{item['part']}' requires transform of 6 numbers."
+                    )
+                tx, ty, tz, rx, ry, rz = [float(v) for v in transform]
+                handle.write(f"{assembly['name']},{item['part']},{tx},{ty},{tz},{rx},{ry},{rz}\n")
 
 
-def main():
-    ap = argparse.ArgumentParser(description="MechaCoop CLI")
-    ap.add_argument("spec", help="Path to YAML spec")
-    ap.add_argument("--outdir", default="build")
-    args = ap.parse_args()
-    build(args.spec, args.outdir)
+def build(spec_path: str, outdir: str = "build") -> str:
+    spec = _load_spec(spec_path)
+    project_name = spec.get("project") or os.path.splitext(os.path.basename(spec_path))[0]
+    project_outdir = os.path.join(outdir, project_name)
+    os.makedirs(project_outdir, exist_ok=True)
+
+    part_names: set[str] = set()
+    for part in spec["parts"]:
+        name, model = _make_part(part)
+        if name in part_names:
+            raise SpecError(f"Duplicate part name '{name}' in spec.")
+        part_names.add(name)
+        cq.exporters.export(model, os.path.join(project_outdir, f"{name}.step"))
+        cq.exporters.export(model, os.path.join(project_outdir, f"{name}.stl"))
+
+    asm_path = os.path.join(project_outdir, "assembly.csv")
+    _write_assembly_csv(spec, asm_path, part_names)
+    return project_outdir
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="MECHA CLI")
+    parser.add_argument("spec", help="Path to YAML spec")
+    parser.add_argument("--outdir", default="build", help="Output directory (default: build)")
+    args = parser.parse_args()
+
+    try:
+        project_outdir = build(args.spec, args.outdir)
+    except SpecError as err:
+        print(f"Spec error: {err}", file=sys.stderr)
+        return 2
+    except Exception as err:  # pragma: no cover - guard for unexpected runtime errors
+        print(f"Build failed: {err}", file=sys.stderr)
+        return 1
+
+    print(f"Done. Files in {project_outdir}/ (STEP, STL, and assembly.csv)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
