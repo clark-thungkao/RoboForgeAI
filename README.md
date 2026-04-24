@@ -137,3 +137,5 @@ See `CONTRIBUTING.md` and `docs/dev_setup.md`.
 - `docs/adr_004_ai_governance.md`
 - `docs/adr_005_pilot_gtm_validation.md`
 - `docs/release_checklist.md`
+- `docs/ui_flow.md`
+- `docs/ui_changelog.md`
