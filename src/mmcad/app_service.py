@@ -139,6 +139,16 @@ class BuildService:
             "design_report": report,
         }
 
+    def get_latest_job_summary(self) -> dict:
+        jobs = self.list_jobs(limit=1)
+        if not jobs:
+            raise RuntimeError("No jobs available.")
+        latest = jobs[0]
+        if latest["status"] == "succeeded":
+            metadata = self.get_run_metadata(str(latest["job_id"]))
+            return {"latest_job": latest, "run_metadata": metadata}
+        return {"latest_job": latest, "run_metadata": None}
+
     def _run_job(self, job_id: str) -> None:
         with self._lock:
             record = self._jobs[job_id]

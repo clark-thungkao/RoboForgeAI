@@ -10,6 +10,7 @@ from mmcad.ipc_api import (
     api_get_artifacts,
     api_get_job_status,
     api_get_run_metadata,
+    api_get_latest_job_summary,
     api_list_jobs,
     api_load_project,
     api_save_project,
@@ -265,3 +266,30 @@ def test_api_validate_project_data_invalid_payload_returns_input_error() -> None
     result = api_validate_project_data({"schema_version": 1})
     assert result["ok"] is False
     assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_get_latest_job_summary_returns_generation_failure_when_empty() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_latest_job_summary(service)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "generation_failure"
+
+
+def test_api_get_latest_job_summary_success(tmp_path: Path) -> None:
+    def fake_build(_: str, outdir: str) -> str:
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    job_id = api_start_generation(service, "spec.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, job_id)
+    result = api_get_latest_job_summary(service)
+    assert result["ok"] is True
+    assert result["data"]["latest_job"]["job_id"] == job_id
+    assert result["data"]["run_metadata"]["status"] == "succeeded"
