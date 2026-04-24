@@ -107,3 +107,15 @@ tests/
 ## Contributing
 
 See `CONTRIBUTING.md` and `docs/dev_setup.md`.
+
+## Product Planning Docs
+
+- `docs/requirements_v2.md`
+- `docs/roadmap_24m.md`
+- `docs/m1_implementation_plan.md`
+- `docs/adr_001_m1_architecture.md`
+- `docs/adr_002_component_library.md`
+- `docs/adr_003_rule_engine_policy.md`
+- `docs/adr_004_ai_governance.md`
+- `docs/adr_005_pilot_gtm_validation.md`
+- `docs/release_checklist.md`
