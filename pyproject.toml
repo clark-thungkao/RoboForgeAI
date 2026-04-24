@@ -32,6 +32,7 @@ Issues = "https://github.com/clark-thungkao/RoboForgeAI/issues"
 
 [project.scripts]
 mmcad = "mmcad.cli:main"
+mmcad-gui = "mmcad.gui:launch"
 
 [project.optional-dependencies]
 dev = [
