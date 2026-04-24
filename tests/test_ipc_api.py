@@ -8,6 +8,7 @@ from mmcad.ipc_api import (
     api_cancel_generation,
     api_get_artifacts,
     api_get_job_status,
+    api_get_run_metadata,
     api_list_jobs,
     api_start_generation,
     api_start_generation_from_project,
@@ -135,3 +136,38 @@ def test_api_cancel_generation_running_job(tmp_path: Path) -> None:
     _await_terminal(service, job_id)
     status = api_get_job_status(service, job_id)
     assert status["data"]["status"] == "cancelled"
+
+
+def test_api_get_run_metadata_success(tmp_path: Path) -> None:
+    def fake_build(_: str, outdir: str) -> str:
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    started = api_start_generation(service, "spec.yaml", str(tmp_path))
+    job_id = started["data"]["job_id"]
+    _await_terminal(service, job_id)
+
+    result = api_get_run_metadata(service, job_id)
+    assert result["ok"] is True
+    assert result["data"]["status"] == "succeeded"
+    assert result["data"]["design_report"]["report_version"] == 1
+
+
+def test_api_get_run_metadata_non_terminal_returns_generation_failure(tmp_path: Path) -> None:
+    def slow_build(_: str, outdir: str) -> str:
+        time.sleep(0.2)
+        return str(Path(outdir) / "demo")
+
+    service = BuildService(build_fn=slow_build)
+    started = api_start_generation(service, "spec.yaml", str(tmp_path))
+    result = api_get_run_metadata(service, started["data"]["job_id"])
+
+    assert result["ok"] is False
+    assert result["error"]["category"] == "generation_failure"

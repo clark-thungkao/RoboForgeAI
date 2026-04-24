@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
+import json
 from pathlib import Path
 from threading import Lock, Thread
 from typing import Callable
@@ -105,6 +106,28 @@ class BuildService:
 
         files = sorted(str(path) for path in Path(project_outdir).glob("*") if path.is_file())
         return {"job_id": job_id, "project_outdir": project_outdir, "files": files}
+
+    def get_run_metadata(self, job_id: str) -> dict:
+        status = self.get_job_status(job_id)
+        if status["status"] != "succeeded":
+            raise RuntimeError("Run metadata is only available for succeeded jobs.")
+        artifacts = self.get_artifacts(job_id)
+        project_outdir = Path(artifacts["project_outdir"])
+        report_path = project_outdir / "design_report.json"
+        report: dict | None = None
+        if report_path.exists():
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+
+        return {
+            "job_id": job_id,
+            "status": status["status"],
+            "created_at": status["created_at"],
+            "started_at": status["started_at"],
+            "finished_at": status["finished_at"],
+            "project_outdir": artifacts["project_outdir"],
+            "artifacts": artifacts["files"],
+            "design_report": report,
+        }
 
     def _run_job(self, job_id: str) -> None:
         with self._lock:

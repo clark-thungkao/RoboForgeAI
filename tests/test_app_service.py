@@ -120,3 +120,36 @@ def test_cancel_generation_while_running_marks_cancelled(tmp_path: Path) -> None
     status = _wait_for_terminal_state(service, job_id)
     assert status["status"] == "cancelled"
     assert "Cancelled by user" in status["error"]
+
+
+def test_get_run_metadata_returns_report_and_artifact_list(tmp_path: Path) -> None:
+    def fake_build(_: str, outdir: str) -> str:
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "a.step").write_text("step", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    job_id = service.start_generation("spec.yaml", str(tmp_path))
+    _wait_for_terminal_state(service, job_id)
+
+    metadata = service.get_run_metadata(job_id)
+    assert metadata["job_id"] == job_id
+    assert metadata["status"] == "succeeded"
+    assert any(path.endswith("a.step") for path in metadata["artifacts"])
+    assert metadata["design_report"]["report_version"] == 1
+
+
+def test_get_run_metadata_requires_success(tmp_path: Path) -> None:
+    def slow_build(_: str, __: str) -> str:
+        time.sleep(0.2)
+        return str(tmp_path / "demo")
+
+    service = BuildService(build_fn=slow_build)
+    job_id = service.start_generation("spec.yaml", str(tmp_path))
+    with pytest.raises(RuntimeError, match="succeeded jobs"):
+        service.get_run_metadata(job_id)
