@@ -149,6 +149,29 @@ class BuildService:
             return {"latest_job": latest, "run_metadata": metadata}
         return {"latest_job": latest, "run_metadata": None}
 
+    def get_job_stats(self) -> dict:
+        with self._lock:
+            jobs = [asdict(record) for record in self._jobs.values()]
+        if not jobs:
+            return {
+                "total": 0,
+                "by_status": {
+                    "queued": 0,
+                    "running": 0,
+                    "succeeded": 0,
+                    "failed": 0,
+                    "cancelled": 0,
+                },
+                "latest_job_id": None,
+            }
+        by_status = {"queued": 0, "running": 0, "succeeded": 0, "failed": 0, "cancelled": 0}
+        latest = max(jobs, key=lambda item: item["sequence"])
+        for job in jobs:
+            status = str(job["status"])
+            if status in by_status:
+                by_status[status] += 1
+        return {"total": len(jobs), "by_status": by_status, "latest_job_id": latest["job_id"]}
+
     def _run_job(self, job_id: str) -> None:
         with self._lock:
             record = self._jobs[job_id]

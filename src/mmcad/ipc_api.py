@@ -184,3 +184,11 @@ def api_get_latest_job_summary(service: BuildService) -> dict[str, Any]:
     except Exception as err:  # pragma: no cover - defensive boundary
         return _error_payload("unknown_error", str(err))
     return {"ok": True, "data": summary}
+
+
+def api_get_job_stats(service: BuildService) -> dict[str, Any]:
+    try:
+        stats = service.get_job_stats()
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": stats}

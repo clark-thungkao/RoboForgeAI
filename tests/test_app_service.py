@@ -253,3 +253,33 @@ def test_get_latest_job_summary_omits_metadata_for_failed_job(tmp_path: Path) ->
     assert summary["latest_job"]["job_id"] == job_id
     assert summary["latest_job"]["status"] == "failed"
     assert summary["run_metadata"] is None
+
+
+def test_get_job_stats_returns_zeroed_counts_when_empty() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    stats = service.get_job_stats()
+    assert stats["total"] == 0
+    assert stats["latest_job_id"] is None
+    assert stats["by_status"]["queued"] == 0
+    assert stats["by_status"]["succeeded"] == 0
+
+
+def test_get_job_stats_counts_statuses_and_tracks_latest_job(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=fake_build)
+    first = service.start_generation("ok.yaml", str(tmp_path))
+    second = service.start_generation("fail.yaml", str(tmp_path))
+    third = service.start_generation("ok-2.yaml", str(tmp_path))
+    _wait_for_terminal_state(service, first)
+    _wait_for_terminal_state(service, second)
+    _wait_for_terminal_state(service, third)
+
+    stats = service.get_job_stats()
+    assert stats["total"] == 3
+    assert stats["by_status"]["succeeded"] == 2
+    assert stats["by_status"]["failed"] == 1
+    assert stats["latest_job_id"] == third
