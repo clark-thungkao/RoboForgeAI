@@ -5,8 +5,10 @@ from pathlib import Path
 
 from mmcad.app_service import BuildService
 from mmcad.ipc_api import (
+    api_cancel_generation,
     api_get_artifacts,
     api_get_job_status,
+    api_list_jobs,
     api_start_generation,
     api_start_generation_from_project,
 )
@@ -17,7 +19,7 @@ def _await_terminal(service: BuildService, job_id: str, timeout_s: float = 2.0) 
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         status = service.get_job_status(job_id)
-        if status["status"] in {"succeeded", "failed"}:
+        if status["status"] in {"succeeded", "failed", "cancelled"}:
             return
         time.sleep(0.01)
     raise TimeoutError("job did not complete in time")
@@ -95,3 +97,41 @@ def test_api_start_generation_from_project_invalid_file_returns_input_error() ->
 
     assert result["ok"] is False
     assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_list_jobs_returns_jobs_array(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "demo"))
+    job_id = api_start_generation(service, "spec.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, job_id)
+
+    result = api_list_jobs(service)
+    assert result["ok"] is True
+    assert isinstance(result["data"]["jobs"], list)
+    assert any(job["job_id"] == job_id for job in result["data"]["jobs"])
+
+
+def test_api_cancel_generation_unknown_job_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_cancel_generation(service, "missing")
+
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_cancel_generation_running_job(tmp_path: Path) -> None:
+    def slow_build(_: str, outdir: str) -> str:
+        time.sleep(0.2)
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        return str(project_dir)
+
+    service = BuildService(build_fn=slow_build)
+    started = api_start_generation(service, "spec.yaml", str(tmp_path))
+    job_id = started["data"]["job_id"]
+    time.sleep(0.05)
+    cancelled = api_cancel_generation(service, job_id)
+    assert cancelled["ok"] is True
+    _await_terminal(service, job_id)
+    status = api_get_job_status(service, job_id)
+    assert status["data"]["status"] == "cancelled"

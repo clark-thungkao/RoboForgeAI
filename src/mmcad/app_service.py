@@ -24,6 +24,8 @@ class JobRecord:
     finished_at: str | None = None
     project_outdir: str | None = None
     error: str | None = None
+    cancel_requested: bool = False
+    sequence: int = 0
 
 
 def _utc_now() -> str:
@@ -37,15 +39,20 @@ class BuildService:
         self._build_fn = build_fn or build
         self._jobs: dict[str, JobRecord] = {}
         self._lock = Lock()
+        self._sequence = 0
 
     def start_generation(self, spec_path: str, outdir: str) -> str:
         job_id = str(uuid4())
+        with self._lock:
+            self._sequence += 1
+            sequence = self._sequence
         record = JobRecord(
             job_id=job_id,
             spec_path=spec_path,
             outdir=outdir,
             status="queued",
             created_at=_utc_now(),
+            sequence=sequence,
         )
         with self._lock:
             self._jobs[job_id] = record
@@ -67,6 +74,26 @@ class BuildService:
                 raise KeyError(f"Unknown job_id: {job_id}")
             return asdict(record)
 
+    def list_jobs(self) -> list[dict]:
+        with self._lock:
+            jobs = [asdict(record) for record in self._jobs.values()]
+        jobs.sort(key=lambda item: item["sequence"], reverse=True)
+        return jobs
+
+    def cancel_generation(self, job_id: str) -> dict:
+        with self._lock:
+            record = self._jobs.get(job_id)
+            if record is None:
+                raise KeyError(f"Unknown job_id: {job_id}")
+            if record.status in {"succeeded", "failed", "cancelled"}:
+                return asdict(record)
+            record.cancel_requested = True
+            if record.status == "queued":
+                record.status = "cancelled"
+                record.finished_at = _utc_now()
+                record.error = "Cancelled by user before start."
+            return asdict(record)
+
     def get_artifacts(self, job_id: str) -> dict:
         with self._lock:
             record = self._jobs.get(job_id)
@@ -82,6 +109,11 @@ class BuildService:
     def _run_job(self, job_id: str) -> None:
         with self._lock:
             record = self._jobs[job_id]
+            if record.cancel_requested:
+                record.status = "cancelled"
+                record.finished_at = _utc_now()
+                record.error = "Cancelled by user before start."
+                return
             record.status = "running"
             record.started_at = _utc_now()
 
@@ -97,6 +129,11 @@ class BuildService:
 
         with self._lock:
             done = self._jobs[job_id]
-            done.status = "succeeded"
             done.finished_at = _utc_now()
+            if done.cancel_requested:
+                done.status = "cancelled"
+                done.error = "Cancelled by user during execution."
+                done.project_outdir = None
+                return
+            done.status = "succeeded"
             done.project_outdir = output_dir

@@ -44,6 +44,24 @@ def api_get_job_status(service: BuildService, job_id: str) -> dict[str, Any]:
     return {"ok": True, "data": status}
 
 
+def api_list_jobs(service: BuildService) -> dict[str, Any]:
+    try:
+        jobs = service.list_jobs()
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": {"jobs": jobs}}
+
+
+def api_cancel_generation(service: BuildService, job_id: str) -> dict[str, Any]:
+    try:
+        status = service.cancel_generation(job_id)
+    except KeyError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": status}
+
+
 def api_get_artifacts(service: BuildService, job_id: str) -> dict[str, Any]:
     try:
         artifacts = service.get_artifacts(job_id)
