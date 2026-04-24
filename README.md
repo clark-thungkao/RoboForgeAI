@@ -20,6 +20,23 @@ python -m pip install -e .
 mmcad examples/bracket_demo.yaml --outdir build
 ```
 
+## Desktop UI Scaffold (Preview)
+
+You can launch the first desktop scaffold (Tkinter) with:
+
+```bash
+mmcad-gui
+```
+
+What it currently does:
+- lets you pick a YAML spec
+- lets you choose output folder
+- starts generation
+- polls job status
+- lists generated artifact files when run succeeds
+
+This is a foundation UI and will be expanded in the next slices.
+
 Outputs are written to `build/<project>/`:
 - `<part>.step`
 - `<part>.stl`
