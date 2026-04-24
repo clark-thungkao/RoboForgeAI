@@ -135,6 +135,30 @@ def test_api_list_jobs_returns_jobs_array(tmp_path: Path) -> None:
     assert any(job["job_id"] == job_id for job in result["data"]["jobs"])
 
 
+def test_api_list_jobs_supports_status_and_limit_filters(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=fake_build)
+    api_start_generation(service, "ok.yaml", str(tmp_path))
+    failed_job = api_start_generation(service, "fail.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, failed_job)
+
+    result = api_list_jobs(service, status="failed", limit=1)
+    assert result["ok"] is True
+    assert len(result["data"]["jobs"]) == 1
+    assert result["data"]["jobs"][0]["status"] == "failed"
+
+
+def test_api_list_jobs_invalid_limit_returns_input_error(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "demo"))
+    result = api_list_jobs(service, limit=0)
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
 def test_api_cancel_generation_unknown_job_returns_input_error() -> None:
     service = BuildService(build_fn=lambda *_: "unused")
     result = api_cancel_generation(service, "missing")

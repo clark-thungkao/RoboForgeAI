@@ -127,9 +127,13 @@ def api_get_job_status(service: BuildService, job_id: str) -> dict[str, Any]:
     return {"ok": True, "data": status}
 
 
-def api_list_jobs(service: BuildService) -> dict[str, Any]:
+def api_list_jobs(
+    service: BuildService, *, status: str | None = None, limit: int | None = None
+) -> dict[str, Any]:
     try:
-        jobs = service.list_jobs()
+        jobs = service.list_jobs(status=status, limit=limit)
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
     except Exception as err:  # pragma: no cover - defensive boundary
         return _error_payload("unknown_error", str(err))
     return {"ok": True, "data": {"jobs": jobs}}
