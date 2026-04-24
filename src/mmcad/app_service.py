@@ -79,10 +79,16 @@ class BuildService:
                 raise KeyError(f"Unknown job_id: {job_id}")
             return asdict(record)
 
-    def list_jobs(self) -> list[dict]:
+    def list_jobs(self, *, status: str | None = None, limit: int | None = None) -> list[dict]:
+        if limit is not None and limit <= 0:
+            raise ValueError("limit must be a positive integer.")
         with self._lock:
             jobs = [asdict(record) for record in self._jobs.values()]
+        if status is not None:
+            jobs = [item for item in jobs if item["status"] == status]
         jobs.sort(key=lambda item: item["sequence"], reverse=True)
+        if limit is not None:
+            jobs = jobs[:limit]
         return jobs
 
     def cancel_generation(self, job_id: str) -> dict:

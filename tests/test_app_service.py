@@ -71,6 +71,41 @@ def test_list_jobs_returns_newest_first(tmp_path: Path) -> None:
     assert jobs[1]["job_id"] == first
 
 
+def test_list_jobs_supports_status_filter(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=fake_build)
+    success_job = service.start_generation("ok.yaml", str(tmp_path))
+    failed_job = service.start_generation("fail.yaml", str(tmp_path))
+    _wait_for_terminal_state(service, success_job)
+    _wait_for_terminal_state(service, failed_job)
+
+    failed_jobs = service.list_jobs(status="failed")
+    assert len(failed_jobs) == 1
+    assert failed_jobs[0]["job_id"] == failed_job
+
+
+def test_list_jobs_supports_limit(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "a"))
+    first = service.start_generation("one.yaml", str(tmp_path))
+    second = service.start_generation("two.yaml", str(tmp_path))
+    _wait_for_terminal_state(service, first)
+    _wait_for_terminal_state(service, second)
+
+    jobs = service.list_jobs(limit=1)
+    assert len(jobs) == 1
+    assert jobs[0]["job_id"] == second
+
+
+def test_list_jobs_rejects_non_positive_limit(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "a"))
+    with pytest.raises(ValueError, match="positive integer"):
+        service.list_jobs(limit=0)
+
+
 def test_cancel_generation_unknown_job_raises_key_error() -> None:
     service = BuildService(build_fn=lambda *_: "unused")
     with pytest.raises(KeyError, match="Unknown job_id"):
