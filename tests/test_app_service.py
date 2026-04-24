@@ -283,3 +283,30 @@ def test_get_job_stats_counts_statuses_and_tracks_latest_job(tmp_path: Path) -> 
     assert stats["by_status"]["succeeded"] == 2
     assert stats["by_status"]["failed"] == 1
     assert stats["latest_job_id"] == third
+
+
+def test_get_dashboard_snapshot_empty_service_has_no_latest_summary() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    snapshot = service.get_dashboard_snapshot()
+    assert snapshot["stats"]["total"] == 0
+    assert snapshot["latest_summary"] is None
+
+
+def test_get_dashboard_snapshot_includes_latest_summary_when_jobs_exist(tmp_path: Path) -> None:
+    def fake_build(_: str, outdir: str) -> str:
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    job_id = service.start_generation("spec.yaml", str(tmp_path))
+    _wait_for_terminal_state(service, job_id)
+    snapshot = service.get_dashboard_snapshot()
+    assert snapshot["stats"]["total"] == 1
+    assert snapshot["latest_summary"] is not None
+    assert snapshot["latest_summary"]["latest_job"]["job_id"] == job_id
