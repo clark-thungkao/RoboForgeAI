@@ -8,6 +8,7 @@ from mmcad.project_io import (
     create_project_data,
     load_project,
     save_project,
+    validate_project_data,
 )
 
 
@@ -69,6 +70,18 @@ def api_save_project(project_path: str, project_data: dict[str, Any]) -> dict[st
 def api_load_project(project_path: str) -> dict[str, Any]:
     try:
         project = load_project(project_path)
+    except ProjectError as err:
+        return _error_payload("input_validation_error", str(err))
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": {"project": project}}
+
+
+def api_validate_project_data(project_data: dict[str, Any]) -> dict[str, Any]:
+    try:
+        project = validate_project_data(project_data)
     except ProjectError as err:
         return _error_payload("input_validation_error", str(err))
     except ValueError as err:
