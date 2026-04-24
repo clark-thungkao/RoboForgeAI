@@ -172,6 +172,13 @@ class BuildService:
                 by_status[status] += 1
         return {"total": len(jobs), "by_status": by_status, "latest_job_id": latest["job_id"]}
 
+    def get_dashboard_snapshot(self) -> dict:
+        stats = self.get_job_stats()
+        latest_summary: dict | None = None
+        if stats["total"] > 0:
+            latest_summary = self.get_latest_job_summary()
+        return {"stats": stats, "latest_summary": latest_summary}
+
     def _run_job(self, job_id: str) -> None:
         with self._lock:
             record = self._jobs[job_id]

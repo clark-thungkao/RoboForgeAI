@@ -12,6 +12,7 @@ from mmcad.ipc_api import (
     api_get_run_metadata,
     api_get_latest_job_summary,
     api_get_job_stats,
+    api_get_dashboard_snapshot,
     api_list_jobs,
     api_load_project,
     api_save_project,
@@ -318,3 +319,31 @@ def test_api_get_job_stats_counts_jobs(tmp_path: Path) -> None:
     assert result["ok"] is True
     assert result["data"]["total"] >= 2
     assert result["data"]["by_status"]["failed"] >= 1
+
+
+def test_api_get_dashboard_snapshot_empty_service() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_dashboard_snapshot(service)
+    assert result["ok"] is True
+    assert result["data"]["stats"]["total"] == 0
+    assert result["data"]["latest_summary"] is None
+
+
+def test_api_get_dashboard_snapshot_with_succeeded_latest_job(tmp_path: Path) -> None:
+    def fake_build(_: str, outdir: str) -> str:
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "assembly.csv").write_text("a,b\n", encoding="utf-8")
+        (project_dir / "design_report.json").write_text(
+            '{"report_version": 1, "project": "demo"}',
+            encoding="utf-8",
+        )
+        return str(project_dir)
+
+    service = BuildService(build_fn=fake_build)
+    job_id = api_start_generation(service, "spec.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, job_id)
+    result = api_get_dashboard_snapshot(service)
+    assert result["ok"] is True
+    assert result["data"]["stats"]["total"] == 1
+    assert result["data"]["latest_summary"]["latest_job"]["job_id"] == job_id
