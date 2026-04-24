@@ -11,6 +11,7 @@ from mmcad.ipc_api import (
     api_get_job_status,
     api_get_run_metadata,
     api_get_latest_job_summary,
+    api_get_job_stats,
     api_list_jobs,
     api_load_project,
     api_save_project,
@@ -293,3 +294,27 @@ def test_api_get_latest_job_summary_success(tmp_path: Path) -> None:
     assert result["ok"] is True
     assert result["data"]["latest_job"]["job_id"] == job_id
     assert result["data"]["run_metadata"]["status"] == "succeeded"
+
+
+def test_api_get_job_stats_empty_service() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_get_job_stats(service)
+    assert result["ok"] is True
+    assert result["data"]["total"] == 0
+    assert result["data"]["latest_job_id"] is None
+
+
+def test_api_get_job_stats_counts_jobs(tmp_path: Path) -> None:
+    def fake_build(spec_path: str, outdir: str) -> str:
+        if "fail" in spec_path:
+            raise ValueError("boom")
+        return str(Path(outdir) / "ok")
+
+    service = BuildService(build_fn=fake_build)
+    api_start_generation(service, "ok.yaml", str(tmp_path))
+    failed_id = api_start_generation(service, "fail.yaml", str(tmp_path))["data"]["job_id"]
+    _await_terminal(service, failed_id)
+    result = api_get_job_stats(service)
+    assert result["ok"] is True
+    assert result["data"]["total"] >= 2
+    assert result["data"]["by_status"]["failed"] >= 1
