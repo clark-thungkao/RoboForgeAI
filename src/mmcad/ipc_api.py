@@ -75,3 +75,15 @@ def api_get_artifacts(service: BuildService, job_id: str) -> dict[str, Any]:
     except Exception as err:  # pragma: no cover - defensive boundary
         return _error_payload("unknown_error", str(err))
     return {"ok": True, "data": artifacts}
+
+
+def api_get_run_metadata(service: BuildService, job_id: str) -> dict[str, Any]:
+    try:
+        metadata = service.get_run_metadata(job_id)
+    except KeyError as err:
+        return _error_payload("input_validation_error", str(err))
+    except RuntimeError as err:
+        return _error_payload("generation_failure", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": metadata}
