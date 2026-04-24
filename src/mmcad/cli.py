@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 
@@ -98,6 +99,23 @@ def _write_assembly_csv(spec: dict, output_path: str, part_names: set[str]) -> N
                 handle.write(f"{assembly['name']},{item['part']},{tx},{ty},{tz},{rx},{ry},{rz}\n")
 
 
+def _write_design_report(spec: dict, output_path: str, part_names: list[str], outputs: list[str]) -> None:
+    report = {
+        "report_version": 1,
+        "project": spec.get("project"),
+        "parts": part_names,
+        "assumptions": [
+            "Geometry is generated from deterministic parametric rules.",
+            "Output must be reviewed and verified before manufacturing use.",
+        ],
+        "warnings": [],
+        "outputs": outputs,
+    }
+    with open(output_path, "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2)
+        handle.write("\n")
+
+
 def build(spec_path: str, outdir: str = "build") -> str:
     spec = _load_spec(spec_path)
     project_name = spec.get("project") or os.path.splitext(os.path.basename(spec_path))[0]
@@ -115,6 +133,9 @@ def build(spec_path: str, outdir: str = "build") -> str:
 
     asm_path = os.path.join(project_outdir, "assembly.csv")
     _write_assembly_csv(spec, asm_path, part_names)
+    output_files = sorted(file for file in os.listdir(project_outdir) if os.path.isfile(os.path.join(project_outdir, file)))
+    report_path = os.path.join(project_outdir, "design_report.json")
+    _write_design_report(spec, report_path, sorted(part_names), output_files + ["design_report.json"])
     return project_outdir
 
 
@@ -133,7 +154,7 @@ def main() -> int:
         print(f"Build failed: {err}", file=sys.stderr)
         return 1
 
-    print(f"Done. Files in {project_outdir}/ (STEP, STL, and assembly.csv)")
+    print(f"Done. Files in {project_outdir}/ (STEP, STL, assembly.csv, and design_report.json)")
     return 0
 
 
