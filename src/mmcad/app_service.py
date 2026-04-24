@@ -9,7 +9,7 @@ from typing import Callable
 from uuid import uuid4
 
 from mmcad.cli import build
-from mmcad.project_io import load_project
+from mmcad.project_io import load_project, validate_project_data
 
 BuildFn = Callable[[str, str], str]
 
@@ -64,6 +64,10 @@ class BuildService:
 
     def start_generation_from_project(self, project_path: str) -> str:
         project = load_project(project_path)
+        return self.start_generation_from_project_data(project)
+
+    def start_generation_from_project_data(self, project_data: dict) -> str:
+        project = validate_project_data(project_data)
         spec_path = str(project["inputs"]["spec_path"])
         outdir = str(project["generation_profile"]["outdir"])
         return self.start_generation(spec_path, outdir)

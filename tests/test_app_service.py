@@ -105,6 +105,32 @@ def test_start_generation_from_project_uses_project_spec_and_outdir(tmp_path: Pa
     assert captured["outdir"] == str(tmp_path / "out")
 
 
+def test_start_generation_from_project_data_uses_project_spec_and_outdir(tmp_path: Path) -> None:
+    captured: dict[str, str] = {}
+
+    def fake_build(spec_path: str, outdir: str) -> str:
+        captured["spec_path"] = spec_path
+        captured["outdir"] = outdir
+        project_dir = Path(outdir) / "demo"
+        project_dir.mkdir(parents=True, exist_ok=True)
+        (project_dir / "artifact.step").write_text("ok", encoding="utf-8")
+        return str(project_dir)
+
+    project_data = create_project_data(
+        name="sample",
+        spec_path="examples/bracket_demo.yaml",
+        outdir=str(tmp_path / "out"),
+    )
+
+    service = BuildService(build_fn=fake_build)
+    job_id = service.start_generation_from_project_data(project_data)
+    status = _wait_for_terminal_state(service, job_id)
+
+    assert status["status"] == "succeeded"
+    assert captured["spec_path"] == "examples/bracket_demo.yaml"
+    assert captured["outdir"] == str(tmp_path / "out")
+
+
 def test_cancel_generation_while_running_marks_cancelled(tmp_path: Path) -> None:
     def slow_build(_: str, outdir: str) -> str:
         time.sleep(0.2)
