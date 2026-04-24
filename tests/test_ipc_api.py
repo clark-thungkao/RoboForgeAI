@@ -6,10 +6,13 @@ from pathlib import Path
 from mmcad.app_service import BuildService
 from mmcad.ipc_api import (
     api_cancel_generation,
+    api_create_project,
     api_get_artifacts,
     api_get_job_status,
     api_get_run_metadata,
     api_list_jobs,
+    api_load_project,
+    api_save_project,
     api_start_generation,
     api_start_generation_from_project,
 )
@@ -171,3 +174,36 @@ def test_api_get_run_metadata_non_terminal_returns_generation_failure(tmp_path: 
 
     assert result["ok"] is False
     assert result["error"]["category"] == "generation_failure"
+
+
+def test_api_create_project_builds_project_payload() -> None:
+    result = api_create_project(name="demo", spec_path="examples/bracket_demo.yaml", outdir="build")
+
+    assert result["ok"] is True
+    project = result["data"]["project"]
+    assert project["project"]["name"] == "demo"
+    assert project["inputs"]["spec_path"] == "examples/bracket_demo.yaml"
+
+
+def test_api_save_and_load_project_round_trip(tmp_path: Path) -> None:
+    project_path = tmp_path / "demo.rfa.json"
+    created = api_create_project(name="demo", spec_path="examples/bracket_demo.yaml")
+    saved = api_save_project(str(project_path), created["data"]["project"])
+    loaded = api_load_project(str(project_path))
+
+    assert saved["ok"] is True
+    assert loaded["ok"] is True
+    assert loaded["data"]["project"]["project"]["name"] == "demo"
+
+
+def test_api_load_project_bad_path_returns_input_error() -> None:
+    result = api_load_project("missing.rfa.json")
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_save_project_invalid_payload_returns_input_error(tmp_path: Path) -> None:
+    project_path = tmp_path / "bad.rfa.json"
+    result = api_save_project(str(project_path), {"schema_version": 1})
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
