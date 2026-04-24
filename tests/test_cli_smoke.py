@@ -12,3 +12,4 @@ def test_build_bracket_demo_writes_outputs(tmp_path: Path) -> None:
     assert (project_dir / "pin.step").exists()
     assert (project_dir / "pin.stl").exists()
     assert (project_dir / "assembly.csv").exists()
+    assert (project_dir / "design_report.json").exists()
