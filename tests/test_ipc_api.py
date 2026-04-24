@@ -14,6 +14,7 @@ from mmcad.ipc_api import (
     api_load_project,
     api_save_project,
     api_start_generation,
+    api_start_generation_from_project_data,
     api_start_generation_from_project,
 )
 from mmcad.project_io import create_project_data, save_project
@@ -99,6 +100,25 @@ def test_api_start_generation_from_project_invalid_file_returns_input_error() ->
     service = BuildService(build_fn=lambda *_: "unused")
     result = api_start_generation_from_project(service, "missing.rfa.json")
 
+    assert result["ok"] is False
+    assert result["error"]["category"] == "input_validation_error"
+
+
+def test_api_start_generation_from_project_data_success(tmp_path: Path) -> None:
+    service = BuildService(build_fn=lambda *_: str(tmp_path / "out" / "sample"))
+    project_data = create_project_data(
+        name="sample",
+        spec_path="examples/bracket_demo.yaml",
+        outdir=str(tmp_path / "out"),
+    )
+    result = api_start_generation_from_project_data(service, project_data)
+    assert result["ok"] is True
+    assert "job_id" in result["data"]
+
+
+def test_api_start_generation_from_project_data_invalid_payload_returns_input_error() -> None:
+    service = BuildService(build_fn=lambda *_: "unused")
+    result = api_start_generation_from_project_data(service, {"schema_version": 1})
     assert result["ok"] is False
     assert result["error"]["category"] == "input_validation_error"
 

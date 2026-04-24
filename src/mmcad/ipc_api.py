@@ -90,6 +90,20 @@ def api_start_generation_from_project(service: BuildService, project_path: str) 
     return {"ok": True, "data": {"job_id": job_id}}
 
 
+def api_start_generation_from_project_data(
+    service: BuildService, project_data: dict[str, Any]
+) -> dict[str, Any]:
+    try:
+        job_id = service.start_generation_from_project_data(project_data)
+    except ProjectError as err:
+        return _error_payload("input_validation_error", str(err))
+    except ValueError as err:
+        return _error_payload("input_validation_error", str(err))
+    except Exception as err:  # pragma: no cover - defensive boundary
+        return _error_payload("unknown_error", str(err))
+    return {"ok": True, "data": {"job_id": job_id}}
+
+
 def api_get_job_status(service: BuildService, job_id: str) -> dict[str, Any]:
     try:
         status = service.get_job_status(job_id)
